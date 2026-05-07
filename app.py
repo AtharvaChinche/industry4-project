@@ -1,19 +1,28 @@
 import streamlit as st
 import pandas as pd
 import random
-import time
+from pymongo import MongoClient
+from datetime import datetime
 
+# ---------------- MONGODB ----------------
+MONGO_URI = st.secrets["MONGO_URI"]
+
+client = MongoClient(MONGO_URI)
+
+db = client["industry_db"]
+collection = db["machine_logs"]
+
+# ---------------- PAGE ----------------
 st.set_page_config(
     page_title="Industry 4.0 Dashboard",
     layout="wide"
 )
 
-# ---------------- TITLE ----------------
 st.title("🏭 Knowledge Integrated Real-Time Intelligence")
-st.subheader("Real-Time Industrial Monitoring Dashboard")
+st.subheader("Real-Time Industrial Monitoring System")
 
 # ---------------- SIDEBAR ----------------
-st.sidebar.header("⚙️ Control Panel")
+st.sidebar.header("⚙️ Machine Control Panel")
 
 temperature = st.sidebar.slider(
     "Temperature (°C)",
@@ -36,59 +45,81 @@ speed = st.sidebar.slider(
     1500
 )
 
-# ---------------- STATUS ----------------
-if temperature > 35:
-    status = "ALERT"
+# ---------------- SAVE BUTTON ----------------
+if st.sidebar.button("Update Machine Data"):
+
+    data = {
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "temperature": temperature,
+        "pressure": pressure,
+        "speed": speed
+    }
+
+    collection.insert_one(data)
+
+    st.sidebar.success("Data Stored Successfully")
+
+# ---------------- FETCH LATEST DATA ----------------
+latest = collection.find_one(sort=[("_id", -1)])
+
+if latest:
+
+    latest_temp = latest["temperature"]
+    latest_pressure = latest["pressure"]
+    latest_speed = latest["speed"]
+
+    # ---------------- STATUS ----------------
+    if latest_temp > 35:
+        status = "ALERT"
+    else:
+        status = "NORMAL"
+
+    # ---------------- METRICS ----------------
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Temperature", f"{latest_temp} °C")
+    col2.metric("Pressure", f"{latest_pressure} bar")
+    col3.metric("Speed", f"{latest_speed} RPM")
+
+    # ---------------- ALERT ----------------
+    if status == "ALERT":
+        st.error("⚠️ ALERT: High Temperature")
+    else:
+        st.success("✅ System Operating Normally")
+
+    # ---------------- HISTORY ----------------
+    st.subheader("📈 Machine Analytics")
+
+    data_list = list(collection.find().sort("_id", -1).limit(10))
+
+    temp_list = []
+    pressure_list = []
+
+    for item in reversed(data_list):
+        temp_list.append(item["temperature"])
+        pressure_list.append(item["pressure"])
+
+    chart_data = pd.DataFrame({
+        "Temperature": temp_list,
+        "Pressure": pressure_list
+    })
+
+    st.line_chart(chart_data)
+
+    # ---------------- TABLE ----------------
+    st.subheader("📋 Recent Machine Logs")
+
+    table_data = []
+
+    for item in reversed(data_list):
+        table_data.append({
+            "Time": item["time"],
+            "Temperature": item["temperature"],
+            "Pressure": item["pressure"],
+            "Speed": item["speed"]
+        })
+
+    st.dataframe(table_data)
+
 else:
-    status = "NORMAL"
-
-# ---------------- TOP METRICS ----------------
-col1, col2, col3 = st.columns(3)
-
-col1.metric("Temperature", f"{temperature} °C")
-col2.metric("Pressure", f"{pressure} bar")
-col3.metric("Speed", f"{speed} RPM")
-
-# ---------------- STATUS BOX ----------------
-if status == "ALERT":
-    st.error("⚠️ ALERT: High Temperature")
-else:
-    st.success("✅ System Operating Normally")
-
-# ---------------- LIVE DATA ----------------
-st.subheader("📈 Live Machine Analytics")
-
-chart_data = pd.DataFrame({
-    "Temperature": [temperature + random.randint(-2, 2) for _ in range(20)],
-    "Pressure": [pressure + random.uniform(-0.5, 0.5) for _ in range(20)]
-})
-
-st.line_chart(chart_data)
-
-# ---------------- MACHINE TABLE ----------------
-st.subheader("🏭 Machine Status Table")
-
-machine_data = pd.DataFrame({
-    "Machine": ["Mixer-01", "Boiler-02", "Packaging-03"],
-    "Temperature": [
-        temperature,
-        temperature - 2,
-        temperature + 1
-    ],
-    "Pressure": [
-        pressure,
-        pressure + 1,
-        pressure - 1
-    ],
-    "Status": [
-        status,
-        "NORMAL",
-        "NORMAL"
-    ]
-})
-
-st.dataframe(machine_data)
-
-# ---------------- FOOTER ----------------
-st.markdown("---")
-st.write("Industry 4.0 Cloud Monitoring System")
+    st.warning("No machine data available yet.")
