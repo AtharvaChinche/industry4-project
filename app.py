@@ -1,8 +1,11 @@
 import streamlit as st
 import pandas as pd
-import random
 from pymongo import MongoClient
 from datetime import datetime
+from streamlit_autorefresh import st_autorefresh
+
+# ---------------- AUTO REFRESH ----------------
+st_autorefresh(interval=3000, key="refresh")
 
 # ---------------- MONGODB ----------------
 MONGO_URI = st.secrets["MONGO_URI"]
@@ -12,17 +15,32 @@ client = MongoClient(MONGO_URI)
 db = client["industry_db"]
 collection = db["machine_logs"]
 
-# ---------------- PAGE ----------------
+# ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="Industry 4.0 Dashboard",
+    page_title="Industry 4.0 Control Center",
     layout="wide"
 )
 
+# ---------------- CUSTOM CSS ----------------
+st.markdown("""
+<style>
+body {
+    background-color: #0e1117;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ---------------- TITLE ----------------
 st.title("🏭 Knowledge Integrated Real-Time Intelligence")
-st.subheader("Real-Time Industrial Monitoring System")
+st.subheader("Industry 4.0 Real-Time Monitoring System")
 
 # ---------------- SIDEBAR ----------------
 st.sidebar.header("⚙️ Machine Control Panel")
+
+machine = st.sidebar.selectbox(
+    "Select Machine",
+    ["Machine A", "Machine B", "Machine C"]
+)
 
 temperature = st.sidebar.slider(
     "Temperature (°C)",
@@ -45,10 +63,11 @@ speed = st.sidebar.slider(
     1500
 )
 
-# ---------------- SAVE BUTTON ----------------
+# ---------------- SAVE DATA ----------------
 if st.sidebar.button("Update Machine Data"):
 
     data = {
+        "machine": machine,
         "time": datetime.now().strftime("%H:%M:%S"),
         "temperature": temperature,
         "pressure": pressure,
@@ -59,8 +78,11 @@ if st.sidebar.button("Update Machine Data"):
 
     st.sidebar.success("Data Stored Successfully")
 
-# ---------------- FETCH LATEST DATA ----------------
-latest = collection.find_one(sort=[("_id", -1)])
+# ---------------- FETCH DATA ----------------
+latest = collection.find_one(
+    {"machine": machine},
+    sort=[("_id", -1)]
+)
 
 if latest:
 
@@ -69,28 +91,38 @@ if latest:
     latest_speed = latest["speed"]
 
     # ---------------- STATUS ----------------
-    if latest_temp > 35:
-        status = "ALERT"
+    if latest_temp > 40:
+        status = "CRITICAL"
+    elif latest_temp > 32:
+        status = "WARNING"
     else:
         status = "NORMAL"
 
     # ---------------- METRICS ----------------
     col1, col2, col3 = st.columns(3)
 
-    col1.metric("Temperature", f"{latest_temp} °C")
-    col2.metric("Pressure", f"{latest_pressure} bar")
-    col3.metric("Speed", f"{latest_speed} RPM")
+    col1.metric("🌡️ Temperature", f"{latest_temp} °C")
+    col2.metric("⚙️ Pressure", f"{latest_pressure} bar")
+    col3.metric("🔄 Speed", f"{latest_speed} RPM")
 
-    # ---------------- ALERT ----------------
-    if status == "ALERT":
-        st.error("⚠️ ALERT: High Temperature")
+    # ---------------- ALERTS ----------------
+    if status == "CRITICAL":
+        st.error("🚨 CRITICAL ALERT: Machine Overheating")
+
+    elif status == "WARNING":
+        st.warning("⚠️ WARNING: Temperature Rising")
+
     else:
         st.success("✅ System Operating Normally")
 
-    # ---------------- HISTORY ----------------
+    # ---------------- ANALYTICS ----------------
     st.subheader("📈 Machine Analytics")
 
-    data_list = list(collection.find().sort("_id", -1).limit(10))
+    data_list = list(
+        collection.find({"machine": machine})
+        .sort("_id", -1)
+        .limit(10)
+    )
 
     temp_list = []
     pressure_list = []
@@ -106,13 +138,15 @@ if latest:
 
     st.line_chart(chart_data)
 
-    # ---------------- TABLE ----------------
-    st.subheader("📋 Recent Machine Logs")
+    # ---------------- LOG TABLE ----------------
+    st.subheader("📋 Machine Logs")
 
     table_data = []
 
     for item in reversed(data_list):
+
         table_data.append({
+            "Machine": item["machine"],
             "Time": item["time"],
             "Temperature": item["temperature"],
             "Pressure": item["pressure"],
@@ -122,4 +156,4 @@ if latest:
     st.dataframe(table_data)
 
 else:
-    st.warning("No machine data available yet.")
+    st.warning("No machine data available.")
