@@ -64,16 +64,17 @@ speed = st.sidebar.slider(
 )
 
 # ---------------- SAVE DATA ----------------
-if st.sidebar.button("Update Machine Data"):
+data = {
+    "machine": machine,
+    "time": datetime.now().strftime("%H:%M:%S"),
+    "temperature": temperature,
+    "pressure": pressure,
+    "speed": speed
+}
 
-    data = {
-        "machine": machine,
-        "time": datetime.now().strftime("%H:%M:%S"),
-        "temperature": temperature,
-        "pressure": pressure,
-        "speed": speed
-    }
+collection.insert_one(data)
 
+   
     collection.insert_one(data)
 
     st.sidebar.success("Data Stored Successfully")
