@@ -21,15 +21,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# ---------------- CUSTOM CSS ----------------
-st.markdown("""
-<style>
-body {
-    background-color: #0e1117;
-}
-</style>
-""", unsafe_allow_html=True)
-
 # ---------------- TITLE ----------------
 st.title("🏭 Knowledge Integrated Real-Time Intelligence")
 st.subheader("Industry 4.0 Real-Time Monitoring System")
@@ -63,23 +54,31 @@ speed = st.sidebar.slider(
     1500
 )
 
-# ---------------- SAVE DATA ----------------
-data = {
-    "machine": machine,
-    "time": datetime.now().strftime("%H:%M:%S"),
-    "temperature": temperature,
-    "pressure": pressure,
-    "speed": speed
-}
+# ---------------- CHECK LAST ENTRY ----------------
+latest_data = collection.find_one(
+    {"machine": machine},
+    sort=[("_id", -1)]
+)
 
-collection.insert_one(data)
+# ---------------- AUTO SAVE ONLY IF VALUES CHANGE ----------------
+if (
+    latest_data is None
+    or latest_data["temperature"] != temperature
+    or latest_data["pressure"] != pressure
+    or latest_data["speed"] != speed
+):
 
-   
+    data = {
+        "machine": machine,
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "temperature": temperature,
+        "pressure": pressure,
+        "speed": speed
+    }
+
     collection.insert_one(data)
 
-    st.sidebar.success("Data Stored Successfully")
-
-# ---------------- FETCH DATA ----------------
+# ---------------- FETCH LATEST DATA ----------------
 latest = collection.find_one(
     {"machine": machine},
     sort=[("_id", -1)]
@@ -94,8 +93,10 @@ if latest:
     # ---------------- STATUS ----------------
     if latest_temp > 40:
         status = "CRITICAL"
+
     elif latest_temp > 32:
         status = "WARNING"
+
     else:
         status = "NORMAL"
 
@@ -129,6 +130,7 @@ if latest:
     pressure_list = []
 
     for item in reversed(data_list):
+
         temp_list.append(item["temperature"])
         pressure_list.append(item["pressure"])
 
@@ -139,7 +141,7 @@ if latest:
 
     st.line_chart(chart_data)
 
-    # ---------------- LOG TABLE ----------------
+    # ---------------- MACHINE LOGS ----------------
     st.subheader("📋 Machine Logs")
 
     table_data = []
